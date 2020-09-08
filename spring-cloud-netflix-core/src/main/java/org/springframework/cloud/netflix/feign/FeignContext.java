@@ -27,6 +27,7 @@ import org.springframework.cloud.context.named.NamedContextFactory;
  */
 public class FeignContext extends NamedContextFactory<FeignClientSpecification> {
 
+	// FeignClientsConfiguration中会加载Encoder、Decoder、Logger等组件
 	public FeignContext() {
 		super(FeignClientsConfiguration.class, "feign", "feign.client.name");
 	}

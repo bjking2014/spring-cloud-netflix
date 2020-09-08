@@ -95,6 +95,7 @@ public class FeignClientsConfiguration {
 	@Configuration
 	@ConditionalOnClass({ HystrixCommand.class, HystrixFeign.class })
 	protected static class HystrixFeignConfiguration {
+		// 一般环境都会配置 feign.hystrix.enabled = true
 		@Bean
 		@Scope("prototype")
 		@ConditionalOnMissingBean

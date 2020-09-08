@@ -48,6 +48,7 @@ import feign.codec.ErrorDecoder;
  * @author Eko Kurniawan Khannedy
  * @author Gregor Zurowski
  */
+// 实现 FactoryBean 的工厂类，每次SpringContext创建实体类的时候会调用它的 getObject 方法
 class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean,
 		ApplicationContextAware {
 	/***********************************
@@ -81,10 +82,14 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean,
 	}
 
 	protected Feign.Builder feign(FeignContext context) {
+		// 从 context 中获取到默认 Logger组件:Slf4jLogger
 		FeignLoggerFactory loggerFactory = get(context, FeignLoggerFactory.class);
 		Logger logger = loggerFactory.create(this.type);
 
 		// @formatter:off
+		// 从 context 中找 type：Feign.Builder.class 对应的组件信息
+		// 然后往 builder 中放入各种组件信息
+		// 构造的 Feign.Builder 在 FeignClientsConfiguration 初始化，一般使用的是HystrixFeign.builder()
 		Feign.Builder builder = get(context, Feign.Builder.class)
 				// required values
 				.logger(logger)
@@ -103,9 +108,12 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean,
 		if (properties != null) {
 			if (properties.isDefaultToProperties()) {
 				configureUsingConfiguration(context, builder);
+				// 先指定一个全局配置
 				configureUsingProperties(properties.getConfig().get(properties.getDefaultConfig()), builder);
+				// 再指定针对某个服务的配置，针对服务的配置优先级会高于全局配置
 				configureUsingProperties(properties.getConfig().get(this.name), builder);
 			} else {
+				// 同理
 				configureUsingProperties(properties.getConfig().get(properties.getDefaultConfig()), builder);
 				configureUsingProperties(properties.getConfig().get(this.name), builder);
 				configureUsingConfiguration(context, builder);
@@ -202,12 +210,32 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean,
 		return context.getInstance(this.name, type);
 	}
 
+	/**
+	* @Description:
+	* @author: Simple
+	* @param builder: 真实对象是 HystrixFeign.builder()
+	* @param context: 每个服务对应一个独立的spring容器，可以取出自己的LoadBalancer之类的东西
+	* @param target: 这个对象包含接口类型com.zhss.service.ServiceAClient，服务名称ServiceA，url地址http://ServiceA
+	* @Return: T
+	*/
 	protected <T> T loadBalance(Feign.Builder builder, FeignContext context,
 			HardCodedTarget<T> target) {
+		// 从 context取出 Client.class 对应的数据
+		// 这个client类来源： FeignRibbonClientAutoConfiguration -> DefaultFeignLoadBalancedConfiguration
+		// 可以找到 LoadBalancerFeignClient 这个类
 		Client client = getOptional(context, Client.class);
 		if (client != null) {
 			builder.client(client);
+			// FeignAutoConfiguration 中会根据 feign.hystrix.HystrixFeign = true 这个配置创建 HystrixTargeter 类
 			Targeter targeter = get(context, Targeter.class);
+			// 实际上执行的是 HystrixTargeter.target()
+			// 调用Feign.target方法 ，
+			// 1、target方法里先调用build()来创建一个ReflectieFein对象
+			// 2、调用来创建一个ReflectieFein.newInstance方法
+			// newInstance 方法 先构造一个nameToHandler，是@FeignClient中方法名对应的MethodHandler对象
+			// 将具体的method作为map的key值
+			//  JDK动态代理 返回类似于：ReflectiveFeign$FeignInvocationHandler@7642
+			// methodToHandler中包含Feign.builder()、Feign.client()等信息
 			return targeter.target(this, builder, context, target);
 		}
 
@@ -217,9 +245,12 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean,
 
 	@Override
 	public Object getObject() throws Exception {
+		// 可以类比 ribbon中的 SpringClientFactory，每个服务对应一个独立的Spring容器
 		FeignContext context = applicationContext.getBean(FeignContext.class);
+		// builder 中包含 contract、logLevel、encoder、decoder、options等信息
 		Feign.Builder builder = feign(context);
 
+		// 如果@FeignClient 上没有指定url，就用ribbon的负载均衡
 		if (!StringUtils.hasText(this.url)) {
 			String url;
 			if (!this.name.startsWith("http")) {
@@ -228,6 +259,7 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean,
 			else {
 				url = this.name;
 			}
+			// 这里构建的url类似于：http://ServiceA
 			url += cleanPath();
 			return loadBalance(builder, context, new HardCodedTarget<>(this.type,
 					this.name, url));

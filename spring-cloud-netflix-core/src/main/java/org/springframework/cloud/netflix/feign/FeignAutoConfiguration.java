@@ -70,6 +70,7 @@ public class FeignAutoConfiguration {
 	@Bean
 	public FeignContext feignContext() {
 		FeignContext context = new FeignContext();
+		// configurations是一个Map结构
 		context.setConfigurations(this.configurations);
 		return context;
 	}

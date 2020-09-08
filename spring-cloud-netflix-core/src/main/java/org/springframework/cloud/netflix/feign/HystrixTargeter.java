@@ -35,6 +35,8 @@ class HystrixTargeter implements Targeter {
 	@Override
 	public <T> T target(FeignClientFactoryBean factory, Feign.Builder feign, FeignContext context,
 						Target.HardCodedTarget<T> target) {
+
+		// 判断Feign.builder()类型
 		if (!(feign instanceof feign.hystrix.HystrixFeign.Builder)) {
 			return feign.target(target);
 		}
@@ -53,6 +55,7 @@ class HystrixTargeter implements Targeter {
 			return targetWithFallbackFactory(factory.getName(), context, target, builder, fallbackFactory);
 		}
 
+		// 最终都会执行feign.target()方法
 		return feign.target(target);
 	}
 
